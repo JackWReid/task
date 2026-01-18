@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/jackreid/task/internal/store"
+	"github.com/jackreid/task/internal/version"
 )
 
 var (
@@ -45,6 +46,8 @@ func run(args []string) error {
 	case "help", "-h", "--help":
 		printHelp()
 		return nil
+	case "version", "-v", "--version":
+		return runVersion(args[1:])
 	case "init":
 		return runInit(args[1:])
 	case "list":
@@ -96,6 +99,12 @@ Aliases:
   abandon     Set task status to 'abandon'
 
 Use "task <command> -h" for more information about a command.`)
+}
+
+// runVersion prints version information
+func runVersion(args []string) error {
+	fmt.Fprintln(stdout, version.String())
+	return nil
 }
 
 // errorf prints an error message to stderr
