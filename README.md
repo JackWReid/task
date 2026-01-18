@@ -1,6 +1,6 @@
-# Task - a simple task management app
+# Task - a simple task management utility
 
-Task is a simply task management app written in Go that stores its state in a JSON file that's local to each project.
+Task is a simply task management utility written in Go. It stores its state in a JSON file that's local to each project.
 
 Because the tasks are represented in JSON on disk, they're version controlled along with the code.
 
