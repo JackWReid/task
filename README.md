@@ -5,9 +5,10 @@ Task is a simply task management app written in Go that stores its state in a JS
 Because the tasks are represented in JSON on disk, they're version controlled along with the code.
 
 ## Development
+
 When you make changes, don't forget to tag a versioned release.
 
-```
+```bash
 git tag -a v1.0.0 -m "Initial release"
 git push origin v1.0.0
 make build             # Builds with version from git tag
