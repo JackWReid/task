@@ -114,3 +114,51 @@ func runVersion(args []string) error {
 func errorf(format string, args ...interface{}) {
 	fmt.Fprintf(stderr, format+"\n", args...)
 }
+
+// reorderArgsForFlexibleFlags moves the first positional argument (non-flag) to the end
+// of the args slice, allowing flags to come after positional arguments.
+// This enables commands like: task new "Title" --type bug
+func reorderArgsForFlexibleFlags(args []string) []string {
+	if len(args) == 0 {
+		return args
+	}
+
+	// Find the first non-flag argument
+	posArgIndex := -1
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		// Check if this is a flag (starts with -)
+		if len(arg) > 0 && arg[0] == '-' {
+			// This is a flag
+			// Check if it's a short flag with value attached (e.g., -tbug) or long flag
+			// For flags like -t or --type, the next arg might be the value
+			// We'll assume the next non-flag arg is the value if it exists
+			if i+1 < len(args) && len(args[i+1]) > 0 && args[i+1][0] != '-' {
+				// Skip the flag value
+				i++
+			}
+			continue
+		}
+		// Found first positional argument
+		posArgIndex = i
+		break
+	}
+
+	// If no positional argument found, return as-is
+	if posArgIndex == -1 {
+		return args
+	}
+
+	// Reorder: flags before positional, then positional, then flags after
+	posArg := args[posArgIndex]
+	flagsBefore := args[:posArgIndex]
+	flagsAfter := args[posArgIndex+1:]
+
+	// Combine: flags before, flags after, then positional argument
+	result := make([]string, 0, len(args))
+	result = append(result, flagsBefore...)
+	result = append(result, flagsAfter...)
+	result = append(result, posArg)
+
+	return result
+}

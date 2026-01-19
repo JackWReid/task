@@ -580,6 +580,165 @@ func TestAliasesMissingID(t *testing.T) {
 	}
 }
 
+func TestFlexibleFlagOrderNew(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	// Test: positional argument before flags
+	env.stdout.Reset()
+	err := run([]string{"new", "Test Task", "--type", "bug", "--label", "urgent"})
+	if err != nil {
+		t.Errorf("run(new with positional before flags) error = %v", err)
+	}
+
+	output := env.stdout.String()
+	if !strings.Contains(output, "Created task") {
+		t.Error("new should create task")
+	}
+
+	// Verify task was created with correct type and label
+	taskID := extractTaskID(output)
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["type"] != "bug" {
+		t.Errorf("task type = %q, want %q", task["type"], "bug")
+	}
+
+	labels, ok := task["labels"].([]interface{})
+	if !ok || len(labels) != 1 || labels[0] != "urgent" {
+		t.Errorf("task labels = %v, want [urgent]", labels)
+	}
+}
+
+func TestFlexibleFlagOrderNewMultipleFlags(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	// Test: positional argument with multiple flags after it
+	env.stdout.Reset()
+	err := run([]string{"new", "Multi Flag Task", "--type", "feature", "--label", "frontend", "--label", "priority", "--description", "Test description"})
+	if err != nil {
+		t.Errorf("run(new with multiple flags after positional) error = %v", err)
+	}
+
+	taskID := extractTaskID(env.stdout.String())
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["type"] != "feature" {
+		t.Errorf("task type = %q, want %q", task["type"], "feature")
+	}
+
+	labels, ok := task["labels"].([]interface{})
+	if !ok || len(labels) != 2 {
+		t.Errorf("task labels = %v, want 2 labels", labels)
+	}
+
+	desc, ok := task["description"].(string)
+	if !ok || desc != "Test description" {
+		t.Errorf("task description = %q, want %q", desc, "Test description")
+	}
+}
+
+func TestFlexibleFlagOrderUpdate(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Original Task"})
+	taskID := extractTaskID(env.stdout.String())
+
+	// Test: positional argument (task ID) before flags
+	env.stdout.Reset()
+	err := run([]string{"update", taskID, "--name", "Updated Task", "--status", "progress", "--label", "updated"})
+	if err != nil {
+		t.Errorf("run(update with positional before flags) error = %v", err)
+	}
+
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["title"] != "Updated Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Updated Task")
+	}
+
+	if task["status"] != "progress" {
+		t.Errorf("task status = %q, want %q", task["status"], "progress")
+	}
+}
+
+func TestFlexibleFlagOrderShow(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Test Show Task"})
+	taskID := extractTaskID(env.stdout.String())
+
+	// Test: positional argument (task ID) before flags
+	env.stdout.Reset()
+	err := run([]string{"show", taskID, "--json"})
+	if err != nil {
+		t.Errorf("run(show with positional before flags) error = %v", err)
+	}
+
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["title"] != "Test Show Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Test Show Task")
+	}
+}
+
+func TestFlexibleFlagOrderBackwardCompatibility(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	// Test: old format (flags before positional) still works
+	env.stdout.Reset()
+	err := run([]string{"new", "--type", "bug", "--label", "urgent", "Backward Compat Task"})
+	if err != nil {
+		t.Errorf("run(new with flags before positional) error = %v", err)
+	}
+
+	taskID := extractTaskID(env.stdout.String())
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["type"] != "bug" {
+		t.Errorf("task type = %q, want %q", task["type"], "bug")
+	}
+
+	if task["title"] != "Backward Compat Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Backward Compat Task")
+	}
+}
+
 // extractTaskID extracts a task ID from output like "Created task abc: Title"
 func extractTaskID(output string) string {
 	// Look for "task xxx:" or "task xxx " pattern

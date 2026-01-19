@@ -55,7 +55,9 @@ Examples:
   task new "Add feature" -t feature -d "Detailed description" -l frontend -l priority`)
 	}
 
-	if err := fs.Parse(args); err != nil {
+	// Reorder args to allow positional arguments before flags
+	reorderedArgs := reorderArgsForFlexibleFlags(args)
+	if err := fs.Parse(reorderedArgs); err != nil {
 		return err
 	}
 

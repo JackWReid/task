@@ -47,7 +47,9 @@ Examples:
   task update abc -l urgent -l priority`)
 	}
 
-	if err := fs.Parse(args); err != nil {
+	// Reorder args to allow positional arguments before flags
+	reorderedArgs := reorderArgsForFlexibleFlags(args)
+	if err := fs.Parse(reorderedArgs); err != nil {
 		return err
 	}
 
