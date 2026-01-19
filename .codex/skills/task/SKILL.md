@@ -4,7 +4,10 @@ description: "Structured task planning and tracking using the `task` program"
 ---
 
 # Task Skill
-**IMPORTANT:** If you don't have `task` in the $PATH, you can't use this workflow.
+- **IMPORTANT:** If you don't have `task` in the $PATH, you can't use this workflow.
+- Always pass at least one argument to `task new` in an interactive shell, otherwise it'll open an `$EDITOR` and block
+- Always pass at least one field flag to `task edit` in an interactive shell, otherwise it'll open an `$EDITOR` and block
+- When running tests in the agent loop, use `GOCACHE=/tmp/go-build GOPATH=/tmp/go go test ./...` to avoid sandboxed Go build cache paths.
 
 ## Primary workflow
 1. **Orient tasks**: restate the goal and translate it into a small set of tasks in the `task` system, initializing the project if needed and aligning titles, types, and labels.
