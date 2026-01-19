@@ -39,3 +39,5 @@ Thumbs.db
 
 # Local task data
 .task/
+# Added by goreleaser init:
+dist/
