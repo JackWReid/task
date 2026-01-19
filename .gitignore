@@ -18,8 +18,8 @@ vendor/
 go.work
 
 # Project-specific binaries
-task
-task.exe
+./task
+./task.exe
 
 # OS-specific files
 .DS_Store
@@ -39,5 +39,6 @@ Thumbs.db
 
 # Local task data
 .task/
+
 # Added by goreleaser init:
 dist/
