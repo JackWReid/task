@@ -31,6 +31,12 @@ Create a new task. First positional argument is the task name. All tasks start a
 - `-l/--label` taking a list of strings to add as labels to the task
 - `-t/--type` taking `task`, `bug`, or `feature`
 
+When no flags are provided, `task new` opens `$EDITOR` with YAML frontmatter for the task fields and the description below it. Avoid using the bare `task new` form in non-interactive shells or automation, since it will block waiting for an editor.
+
+### `task edit`
+
+Edit a task in `$EDITOR`. The editor opens with YAML frontmatter containing the task fields and the description below it. Avoid using `task edit` in non-interactive shells or automation, since it will block waiting for an editor.
+
 ### `task update`
 
 Update an existing task. The first positional argument is the task ID. Optional arguments:
