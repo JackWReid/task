@@ -4,18 +4,7 @@ Task is a simply task management utility written in Go. It stores its state in a
 
 Because the tasks are represented in JSON on disk, they're version controlled along with the code.
 
-## Development
-
-When you make changes, don't forget to tag a versioned release.
-
-```bash
-git tag -a v1.0.0 -m "Initial release"
-git push origin v1.0.0
-make build             # Builds with version from git tag
-make release           # Build release binary
-```
-
-## Commands
+## Usage
 
 ### `task help`/`task -h`
 
@@ -89,4 +78,18 @@ The schema for a task is as follows. The `tasks.json` file is just an array of t
         }
     ]
 }
+```
+
+## Development
+
+To build locally with existing tags:
+```bash
+make build             # Builds with version from git tag
+```
+
+To tag and create a release:
+```bash
+git tag -a v1.0.0 -m "Release name"
+git push origin v1.0.0
+goreleaser release    # Requires goreleaser and GITHUB_TOKEN
 ```

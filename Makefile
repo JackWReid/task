@@ -31,8 +31,3 @@ version:
 	@echo "Version: $(VERSION)"
 	@echo "Build Date: $(BUILD_DATE)"
 	@echo "Git Commit: $(GIT_COMMIT)"
-
-# Create a release build (for tagging releases)
-release: clean
-	@echo "Building release $(VERSION)..."
-	@go build -ldflags "$(LDFLAGS)" -o task .
