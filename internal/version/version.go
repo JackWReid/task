@@ -19,10 +19,7 @@ var GitCommit = "unknown"
 
 // String returns a formatted version string
 func String() string {
-	if Version == "dev" {
-		return fmt.Sprintf("task version %s (build date: %s, commit: %s)", Version, BuildDate, GitCommit)
-	}
-	return fmt.Sprintf("task version %s", Version)
+	return fmt.Sprintf("task version %s (build date: %s, commit: %s)", Version, BuildDate, GitCommit)
 }
 
 // Full returns the full version information
