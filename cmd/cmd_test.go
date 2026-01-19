@@ -164,18 +164,6 @@ func TestRunNewWithFlags(t *testing.T) {
 	}
 }
 
-func TestRunNewMissingTitle(t *testing.T) {
-	env := setupTestEnv(t)
-	defer env.cleanup()
-
-	run([]string{"init"})
-
-	err := run([]string{"new"})
-	if err == nil {
-		t.Error("new without title should return error")
-	}
-}
-
 func TestRunNewInvalidType(t *testing.T) {
 	env := setupTestEnv(t)
 	defer env.cleanup()
@@ -737,6 +725,219 @@ func TestFlexibleFlagOrderBackwardCompatibility(t *testing.T) {
 	if task["title"] != "Backward Compat Task" {
 		t.Errorf("task title = %q, want %q", task["title"], "Backward Compat Task")
 	}
+}
+
+func TestRunNewWithTitleCreatesImmediately(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	// task new "test" should create immediately without launching editor
+	env.stdout.Reset()
+	err := run([]string{"new", "test"})
+	if err != nil {
+		t.Errorf("run(new \"test\") error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "Created task") {
+		t.Error("new with title should create task immediately")
+	}
+
+	// Verify task was created
+	taskID := extractTaskID(env.stdout.String())
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["title"] != "test" {
+		t.Errorf("task title = %q, want %q", task["title"], "test")
+	}
+}
+
+func TestRunNewLaunchesEditor(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	// Create a mock editor script that writes a valid task template
+	editorScript := `#!/bin/sh
+cat > "$1" << 'EOF'
+---
+title: "Editor Created Task"
+type: task
+status: todo
+labels: []
+---
+Description from editor
+EOF
+`
+	tmpEditor := createTempEditorScript(t, editorScript)
+	defer os.Remove(tmpEditor)
+
+	// Override EDITOR for this test
+	origEditor := os.Getenv("EDITOR")
+	os.Setenv("EDITOR", tmpEditor)
+	defer func() {
+		if origEditor == "" {
+			os.Unsetenv("EDITOR")
+		} else {
+			os.Setenv("EDITOR", origEditor)
+		}
+	}()
+
+	// task new without arguments should launch editor
+	env.stdout.Reset()
+	err := run([]string{"new"})
+	if err != nil {
+		t.Errorf("run(new) without args should launch editor, got error: %v", err)
+	}
+
+	// Editor was launched, task should be created with editor content
+	if !strings.Contains(env.stdout.String(), "Created task") {
+		t.Error("new without args should create task via editor")
+	}
+
+	// Verify task has content from editor
+	taskID := extractTaskID(env.stdout.String())
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["title"] != "Editor Created Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Editor Created Task")
+	}
+}
+
+func TestRunEditLaunchesEditor(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Original Task"})
+	taskID := extractTaskID(env.stdout.String())
+
+	// Create a mock editor script that modifies the task
+	editorScript := `#!/bin/sh
+cat > "$1" << 'EOF'
+---
+title: "Edited Task"
+type: bug
+status: progress
+labels: [urgent]
+---
+Updated description
+EOF
+`
+	tmpEditor := createTempEditorScript(t, editorScript)
+	defer os.Remove(tmpEditor)
+
+	// Override EDITOR for this test
+	origEditor := os.Getenv("EDITOR")
+	os.Setenv("EDITOR", tmpEditor)
+	defer func() {
+		if origEditor == "" {
+			os.Unsetenv("EDITOR")
+		} else {
+			os.Setenv("EDITOR", origEditor)
+		}
+	}()
+
+	// task edit $id should launch editor
+	env.stdout.Reset()
+	err := run([]string{"edit", taskID})
+	if err != nil {
+		t.Errorf("run(edit) should launch editor, got error: %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "Updated task") {
+		t.Error("edit should update task via editor")
+	}
+
+	// Verify task was updated with editor content
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["title"] != "Edited Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Edited Task")
+	}
+	if task["type"] != "bug" {
+		t.Errorf("task type = %q, want %q", task["type"], "bug")
+	}
+}
+
+func TestRunEditWithFlagsEditsImmediately(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Original Task"})
+	taskID := extractTaskID(env.stdout.String())
+
+	// task edit $id --type bug should edit immediately without launching editor
+	env.stdout.Reset()
+	err := run([]string{"edit", taskID, "--type", "bug"})
+	if err != nil {
+		t.Errorf("run(edit with flags) error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "Updated task") {
+		t.Error("edit with flags should update task immediately")
+	}
+
+	// Verify task was updated
+	env.stdout.Reset()
+	run([]string{"show", taskID, "--json"})
+	var task map[string]interface{}
+	if err := json.Unmarshal(env.stdout.Bytes(), &task); err != nil {
+		t.Fatalf("failed to parse task JSON: %v", err)
+	}
+
+	if task["type"] != "bug" {
+		t.Errorf("task type = %q, want %q", task["type"], "bug")
+	}
+	// Title should remain unchanged
+	if task["title"] != "Original Task" {
+		t.Errorf("task title = %q, want %q", task["title"], "Original Task")
+	}
+}
+
+// createTempEditorScript creates a temporary executable script file
+func createTempEditorScript(t *testing.T, content string) string {
+	t.Helper()
+	tmpFile, err := os.CreateTemp("", "task-test-editor-*.sh")
+	if err != nil {
+		t.Fatalf("failed to create temp editor script: %v", err)
+	}
+	tmpPath := tmpFile.Name()
+
+	if _, err := tmpFile.WriteString(content); err != nil {
+		tmpFile.Close()
+		os.Remove(tmpPath)
+		t.Fatalf("failed to write editor script: %v", err)
+	}
+	if err := tmpFile.Close(); err != nil {
+		os.Remove(tmpPath)
+		t.Fatalf("failed to close editor script: %v", err)
+	}
+
+	if err := os.Chmod(tmpPath, 0755); err != nil {
+		os.Remove(tmpPath)
+		t.Fatalf("failed to make editor script executable: %v", err)
+	}
+
+	return tmpPath
 }
 
 // extractTaskID extracts a task ID from output like "Created task abc: Title"
