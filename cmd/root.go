@@ -54,6 +54,8 @@ func run(args []string) error {
 		return runList(args[1:])
 	case "new":
 		return runNew(args[1:])
+	case "edit":
+		return runEdit(args[1:])
 	case "update":
 		return runUpdate(args[1:])
 	case "show":
@@ -87,6 +89,7 @@ Commands:
   init        Initialize task management in the current directory
   list        List all tasks
   new         Create a new task
+  edit        Edit a task in $EDITOR
   update      Update an existing task
   show        Show task details
   note        Add a note to a task

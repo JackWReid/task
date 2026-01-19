@@ -123,6 +123,12 @@ func (t *Task) SetDescription(desc string) {
 	t.UpdatedAt = time.Now().UTC()
 }
 
+// SetDescriptionValue sets the description pointer (or clears it when nil).
+func (t *Task) SetDescriptionValue(desc *string) {
+	t.Description = desc
+	t.UpdatedAt = time.Now().UTC()
+}
+
 // AddLabel adds a label to the task if not already present
 func (t *Task) AddLabel(label string) {
 	for _, l := range t.Labels {

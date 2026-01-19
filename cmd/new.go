@@ -41,6 +41,7 @@ func runNew(args []string) error {
 
 Usage:
   task new <title> [flags]
+  task new [title]           (opens $EDITOR when no flags are provided)
 
 Flags:
   -d, --description string   Task description
@@ -49,12 +50,26 @@ Flags:
 
 Examples:
   task new "Implement login"
+  task new
   task new "Fix bug" -t bug -l urgent
   task new "Add feature" -t feature -d "Detailed description" -l frontend -l priority`)
 	}
 
 	if err := fs.Parse(args); err != nil {
 		return err
+	}
+
+	if fs.NFlag() == 0 {
+		if fs.NArg() > 1 {
+			errorf("Error: too many arguments")
+			fs.Usage()
+			return fmt.Errorf("too many arguments")
+		}
+		var title string
+		if fs.NArg() == 1 {
+			title = fs.Arg(0)
+		}
+		return runNewWithEditor(title)
 	}
 
 	if fs.NArg() < 1 {
@@ -101,6 +116,91 @@ Examples:
 	}
 
 	// Save the task
+	if err := s.Add(task); err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	fmt.Fprintf(stdout, "Created task %s: %s\n", task.ID, task.Title)
+	return nil
+}
+
+func runNewWithEditor(title string) error {
+	s := getStore()
+
+	existingIDs, err := s.GetExistingIDs()
+	if err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	taskID, err := id.GenerateUnique(existingIDs)
+	if err != nil {
+		errorf("Error generating ID: %v", err)
+		return err
+	}
+
+	template := renderTaskTemplate(title, model.TypeTask, model.StatusTodo, nil, "")
+	edited, err := openEditorWithTemplate(template)
+	if err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	fm, body, err := parseFrontmatter(edited)
+	if err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	if fm.HasTitle {
+		title = fm.Title
+	}
+	if strings.TrimSpace(title) == "" {
+		errorf("Error: task title is required")
+		return fmt.Errorf("task title is required")
+	}
+
+	taskType := model.TypeTask.String()
+	if fm.HasType {
+		taskType = fm.Type
+	}
+	tt, err := model.ParseTaskType(taskType)
+	if err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	statusValue := model.StatusTodo.String()
+	if fm.HasStatus {
+		statusValue = fm.Status
+	}
+	status, err := model.ParseStatus(statusValue)
+	if err != nil {
+		errorf("Error: %v", err)
+		return err
+	}
+
+	labels := []string{}
+	if fm.HasLabels {
+		labels = normalizeLabels(fm.Labels)
+	}
+
+	task := model.NewTask(taskID, title, tt)
+	if status != model.StatusTodo {
+		if err := task.SetStatus(status); err != nil {
+			errorf("Error: %v", err)
+			return err
+		}
+	}
+	if len(labels) > 0 {
+		task.SetLabels(labels)
+	}
+	description := normalizeDescription(body)
+	if description != nil {
+		task.SetDescriptionValue(description)
+	}
+
 	if err := s.Add(task); err != nil {
 		errorf("Error: %v", err)
 		return err

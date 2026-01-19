@@ -15,6 +15,8 @@ type testEnv struct {
 	origStdout  *os.File
 	origStderr  *os.File
 	origWorkDir string
+	origEditor  string
+	origVisual  string
 	stdout      *bytes.Buffer
 	stderr      *bytes.Buffer
 	cleanup     func()
@@ -30,6 +32,8 @@ func setupTestEnv(t *testing.T) *testEnv {
 
 	// Save original writers
 	env.origWorkDir = workDir
+	env.origEditor = os.Getenv("EDITOR")
+	env.origVisual = os.Getenv("VISUAL")
 
 	// Redirect output
 	stdout = env.stdout
@@ -38,11 +42,23 @@ func setupTestEnv(t *testing.T) *testEnv {
 	// Create temp directory
 	tmpDir := t.TempDir()
 	workDir = tmpDir
+	os.Setenv("EDITOR", "true")
+	os.Unsetenv("VISUAL")
 
 	env.cleanup = func() {
 		stdout = os.Stdout
 		stderr = os.Stderr
 		workDir = env.origWorkDir
+		if env.origEditor == "" {
+			os.Unsetenv("EDITOR")
+		} else {
+			os.Setenv("EDITOR", env.origEditor)
+		}
+		if env.origVisual == "" {
+			os.Unsetenv("VISUAL")
+		} else {
+			os.Setenv("VISUAL", env.origVisual)
+		}
 	}
 
 	return env
@@ -179,7 +195,7 @@ func TestRunList(t *testing.T) {
 
 	run([]string{"init"})
 	run([]string{"new", "Task 1"})
-	run([]string{"new", "Task 2", "-t", "bug"})
+	run([]string{"new", "-t", "bug", "Task 2"})
 
 	env.stdout.Reset()
 	err := run([]string{"list"})
