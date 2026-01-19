@@ -61,23 +61,67 @@ Examples:
 		return err
 	}
 
+	// If no flags are provided, check if we should launch the editor
 	if fs.NFlag() == 0 {
 		if fs.NArg() > 1 {
 			errorf("Error: too many arguments")
 			fs.Usage()
 			return fmt.Errorf("too many arguments")
 		}
-		var title string
-		if fs.NArg() == 1 {
-			title = fs.Arg(0)
+		// Only launch editor if no arguments are provided
+		if fs.NArg() == 0 {
+			return runNewWithEditor("")
 		}
-		return runNewWithEditor(title)
+		// If there's an argument but no flags, create the task directly
+		title := fs.Arg(0)
+		taskType := "task" // default type
+		
+		// Validate task type
+		tt, err := model.ParseTaskType(taskType)
+		if err != nil {
+			errorf("Error: %v", err)
+			return err
+		}
+
+		s := getStore()
+
+		// Get existing IDs to ensure uniqueness
+		existingIDs, err := s.GetExistingIDs()
+		if err != nil {
+			errorf("Error: %v", err)
+			return err
+		}
+
+		// Generate unique ID
+		taskID, err := id.GenerateUnique(existingIDs)
+		if err != nil {
+			errorf("Error generating ID: %v", err)
+			return err
+		}
+
+		// Create the task
+		task := model.NewTask(taskID, title, tt)
+
+		// Save the task
+		if err := s.Add(task); err != nil {
+			errorf("Error: %v", err)
+			return err
+		}
+
+		fmt.Fprintf(stdout, "Created task %s: %s\n", task.ID, task.Title)
+		return nil
 	}
 
 	if fs.NArg() < 1 {
 		errorf("Error: task title is required")
 		fs.Usage()
 		return fmt.Errorf("task title is required")
+	}
+
+	if fs.NArg() > 1 {
+		errorf("Error: too many arguments")
+		fs.Usage()
+		return fmt.Errorf("too many arguments")
 	}
 
 	title := fs.Arg(0)
