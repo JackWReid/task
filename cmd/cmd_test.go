@@ -940,6 +940,148 @@ func createTempEditorScript(t *testing.T, content string) string {
 	return tmpPath
 }
 
+func TestRunDelete(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Task to delete"})
+
+	output := env.stdout.String()
+	taskID := extractTaskID(output)
+
+	env.stdout.Reset()
+	err := run([]string{"delete", taskID})
+	if err != nil {
+		t.Errorf("run(delete) error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "Deleted task") {
+		t.Error("delete should print deletion message")
+	}
+
+	// Verify task was deleted
+	env.stdout.Reset()
+	err = run([]string{"show", taskID})
+	if err == nil {
+		t.Error("show should return error for deleted task")
+	}
+}
+
+func TestRunDeleteNotFound(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	err := run([]string{"delete", "xxx"})
+	if err == nil {
+		t.Error("delete with non-existent ID should return error")
+	}
+}
+
+func TestRunDeleteMissingID(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	err := run([]string{"delete"})
+	if err == nil {
+		t.Error("delete without ID should return error")
+	}
+}
+
+func TestRunClean(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Done Task"})
+	run([]string{"new", "Abandon Task"})
+	run([]string{"new", "Todo Task"})
+
+	output := env.stdout.String()
+	lines := strings.Split(output, "\n")
+	var doneTaskID, abandonTaskID string
+	for _, line := range lines {
+		if strings.Contains(line, "Done Task") {
+			doneTaskID = extractTaskID(line)
+		} else if strings.Contains(line, "Abandon Task") {
+			abandonTaskID = extractTaskID(line)
+		}
+	}
+
+	// Mark tasks as done and abandon
+	run([]string{"complete", doneTaskID})
+	run([]string{"abandon", abandonTaskID})
+
+	env.stdout.Reset()
+	err := run([]string{"clean"})
+	if err != nil {
+		t.Errorf("run(clean) error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "Deleted 2 closed task(s)") {
+		t.Errorf("clean should report 2 deleted tasks, got: %s", env.stdout.String())
+	}
+
+	// Verify closed tasks were deleted
+	env.stdout.Reset()
+	run([]string{"list", "-s", "done"})
+	if !strings.Contains(env.stdout.String(), "No tasks found") {
+		t.Error("clean should delete all done tasks")
+	}
+
+	env.stdout.Reset()
+	run([]string{"list", "-s", "abandon"})
+	if !strings.Contains(env.stdout.String(), "No tasks found") {
+		t.Error("clean should delete all abandon tasks")
+	}
+
+	// Verify todo task remains
+	env.stdout.Reset()
+	run([]string{"list", "-s", "todo"})
+	if !strings.Contains(env.stdout.String(), "Todo Task") {
+		t.Error("clean should not delete todo tasks")
+	}
+}
+
+func TestRunCleanNoClosedTasks(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+	run([]string{"new", "Todo Task"})
+
+	env.stdout.Reset()
+	err := run([]string{"clean"})
+	if err != nil {
+		t.Errorf("run(clean) error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "No closed tasks to delete") {
+		t.Error("clean should report no closed tasks when none exist")
+	}
+}
+
+func TestRunCleanEmpty(t *testing.T) {
+	env := setupTestEnv(t)
+	defer env.cleanup()
+
+	run([]string{"init"})
+
+	env.stdout.Reset()
+	err := run([]string{"clean"})
+	if err != nil {
+		t.Errorf("run(clean) error = %v", err)
+	}
+
+	if !strings.Contains(env.stdout.String(), "No closed tasks to delete") {
+		t.Error("clean should handle empty task list")
+	}
+}
+
 // extractTaskID extracts a task ID from output like "Created task abc: Title"
 func extractTaskID(output string) string {
 	// Look for "task xxx:" or "task xxx " pattern

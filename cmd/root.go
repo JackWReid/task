@@ -62,6 +62,10 @@ func run(args []string) error {
 		return runShow(args[1:])
 	case "note":
 		return runNote(args[1:])
+	case "delete":
+		return runDelete(args[1:])
+	case "clean":
+		return runClean(args[1:])
 	case "ready":
 		return runReady(args[1:])
 	case "take":
@@ -93,6 +97,8 @@ Commands:
   update      Update an existing task
   show        Show task details
   note        Add a note to a task
+  delete      Delete a task completely
+  clean       Delete all closed tasks (done/abandon)
 
 Aliases:
   ready       List tasks with status 'todo'

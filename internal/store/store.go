@@ -226,3 +226,53 @@ func (s *Store) ListFiltered(filter Filter) ([]model.Task, error) {
 
 	return result, nil
 }
+
+// Delete removes a task from the store by ID
+func (s *Store) Delete(id string) error {
+	tasks, err := s.Load()
+	if err != nil {
+		return err
+	}
+
+	found := false
+	newTasks := make([]model.Task, 0, len(tasks)-1)
+	for i := range tasks {
+		if tasks[i].ID == id {
+			found = true
+			continue
+		}
+		newTasks = append(newTasks, tasks[i])
+	}
+
+	if !found {
+		return fmt.Errorf("task not found: %s", id)
+	}
+
+	return s.Save(newTasks)
+}
+
+// Clean removes all closed tasks from the store
+// Closed tasks are those with status 'done' or 'abandon'
+// Returns the number of tasks deleted
+func (s *Store) Clean() (int, error) {
+	tasks, err := s.Load()
+	if err != nil {
+		return 0, err
+	}
+
+	deleted := 0
+	newTasks := make([]model.Task, 0, len(tasks))
+	for i := range tasks {
+		if tasks[i].Status == model.StatusDone || tasks[i].Status == model.StatusAbandon {
+			deleted++
+			continue
+		}
+		newTasks = append(newTasks, tasks[i])
+	}
+
+	if deleted == 0 {
+		return 0, nil
+	}
+
+	return deleted, s.Save(newTasks)
+}

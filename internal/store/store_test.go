@@ -399,3 +399,242 @@ func TestStoreEnsuresNonNilSlices(t *testing.T) {
 		t.Error("Notes should not be nil after Load()")
 	}
 }
+
+func TestStoreDelete(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task1 := model.NewTask("aaa", "Task 1", model.TypeTask)
+	task2 := model.NewTask("bbb", "Task 2", model.TypeTask)
+	task3 := model.NewTask("ccc", "Task 3", model.TypeTask)
+
+	s.Add(task1)
+	s.Add(task2)
+	s.Add(task3)
+
+	// Delete middle task
+	err := s.Delete("bbb")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	tasks, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(tasks) != 2 {
+		t.Errorf("After Delete(), Load() returned %d tasks, want 2", len(tasks))
+	}
+
+	// Verify the correct task was deleted
+	found := false
+	for _, task := range tasks {
+		if task.ID == "bbb" {
+			found = true
+		}
+	}
+	if found {
+		t.Error("Deleted task 'bbb' should not be in store")
+	}
+
+	// Verify remaining tasks are still there
+	foundA := false
+	foundC := false
+	for _, task := range tasks {
+		if task.ID == "aaa" {
+			foundA = true
+		}
+		if task.ID == "ccc" {
+			foundC = true
+		}
+	}
+	if !foundA {
+		t.Error("Task 'aaa' should still be in store")
+	}
+	if !foundC {
+		t.Error("Task 'ccc' should still be in store")
+	}
+}
+
+func TestStoreDeleteNotFound(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task := model.NewTask("abc", "Task 1", model.TypeTask)
+	s.Add(task)
+
+	err := s.Delete("xyz")
+	if err == nil {
+		t.Error("Delete() should return error for non-existent task")
+	}
+
+	// Verify original task still exists
+	tasks, _ := s.Load()
+	if len(tasks) != 1 {
+		t.Errorf("After failed Delete(), Load() returned %d tasks, want 1", len(tasks))
+	}
+}
+
+func TestStoreDeleteLast(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task := model.NewTask("abc", "Task 1", model.TypeTask)
+	s.Add(task)
+
+	err := s.Delete("abc")
+	if err != nil {
+		t.Fatalf("Delete() error = %v", err)
+	}
+
+	tasks, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(tasks) != 0 {
+		t.Errorf("After deleting last task, Load() returned %d tasks, want 0", len(tasks))
+	}
+}
+
+func TestStoreClean(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task1 := model.NewTask("aaa", "Todo Task", model.TypeTask)
+	task1.SetStatus(model.StatusTodo)
+
+	task2 := model.NewTask("bbb", "Done Task", model.TypeTask)
+	task2.SetStatus(model.StatusDone)
+
+	task3 := model.NewTask("ccc", "Abandon Task", model.TypeTask)
+	task3.SetStatus(model.StatusAbandon)
+
+	task4 := model.NewTask("ddd", "Progress Task", model.TypeTask)
+	task4.SetStatus(model.StatusProgress)
+
+	task5 := model.NewTask("eee", "Blocked Task", model.TypeTask)
+	task5.SetStatus(model.StatusBlocked)
+
+	s.Add(task1)
+	s.Add(task2)
+	s.Add(task3)
+	s.Add(task4)
+	s.Add(task5)
+
+	deleted, err := s.Clean()
+	if err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+
+	if deleted != 2 {
+		t.Errorf("Clean() deleted %d tasks, want 2", deleted)
+	}
+
+	tasks, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load() error = %v", err)
+	}
+
+	if len(tasks) != 3 {
+		t.Errorf("After Clean(), Load() returned %d tasks, want 3", len(tasks))
+	}
+
+	// Verify done and abandon tasks are gone
+	for _, task := range tasks {
+		if task.Status == model.StatusDone || task.Status == model.StatusAbandon {
+			t.Errorf("Task %s with status %s should have been deleted", task.ID, task.Status)
+		}
+	}
+
+	// Verify remaining tasks are correct
+	expectedIDs := map[string]bool{"aaa": false, "ddd": false, "eee": false}
+	for _, task := range tasks {
+		if _, ok := expectedIDs[task.ID]; ok {
+			expectedIDs[task.ID] = true
+		}
+	}
+	for id, found := range expectedIDs {
+		if !found {
+			t.Errorf("Task %s should still be in store", id)
+		}
+	}
+}
+
+func TestStoreCleanNoClosedTasks(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task1 := model.NewTask("aaa", "Todo Task", model.TypeTask)
+	task1.SetStatus(model.StatusTodo)
+
+	task2 := model.NewTask("bbb", "Progress Task", model.TypeTask)
+	task2.SetStatus(model.StatusProgress)
+
+	s.Add(task1)
+	s.Add(task2)
+
+	deleted, err := s.Clean()
+	if err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+
+	if deleted != 0 {
+		t.Errorf("Clean() deleted %d tasks, want 0", deleted)
+	}
+
+	tasks, _ := s.Load()
+	if len(tasks) != 2 {
+		t.Errorf("After Clean(), Load() returned %d tasks, want 2", len(tasks))
+	}
+}
+
+func TestStoreCleanEmpty(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	deleted, err := s.Clean()
+	if err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+
+	if deleted != 0 {
+		t.Errorf("Clean() deleted %d tasks, want 0", deleted)
+	}
+}
+
+func TestStoreCleanAll(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	task1 := model.NewTask("aaa", "Done Task", model.TypeTask)
+	task1.SetStatus(model.StatusDone)
+
+	task2 := model.NewTask("bbb", "Abandon Task", model.TypeTask)
+	task2.SetStatus(model.StatusAbandon)
+
+	s.Add(task1)
+	s.Add(task2)
+
+	deleted, err := s.Clean()
+	if err != nil {
+		t.Fatalf("Clean() error = %v", err)
+	}
+
+	if deleted != 2 {
+		t.Errorf("Clean() deleted %d tasks, want 2", deleted)
+	}
+
+	tasks, _ := s.Load()
+	if len(tasks) != 0 {
+		t.Errorf("After Clean(), Load() returned %d tasks, want 0", len(tasks))
+	}
+}
