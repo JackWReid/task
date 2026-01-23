@@ -1,12 +1,15 @@
 package store
 
 import (
+	"bufio"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/jackreid/task/internal/model"
 )
@@ -42,7 +45,7 @@ func (s *Store) taskFile() string {
 	return filepath.Join(s.taskDir(), TaskFile)
 }
 
-// Init creates the .task directory and empty task.json file
+// Init creates the .task directory and empty task file
 func (s *Store) Init() error {
 	taskDir := s.taskDir()
 
@@ -73,6 +76,7 @@ func (s *Store) IsInitialized() bool {
 }
 
 // Load reads and returns all tasks from the store
+// Supports both JSONL format (one task per line) and legacy JSON array format
 func (s *Store) Load() ([]model.Task, error) {
 	data, err := os.ReadFile(s.taskFile())
 	if err != nil {
@@ -82,9 +86,43 @@ func (s *Store) Load() ([]model.Task, error) {
 		return nil, fmt.Errorf("reading task file: %w", err)
 	}
 
+	// Empty file
+	if len(bytes.TrimSpace(data)) == 0 {
+		return []model.Task{}, nil
+	}
+
 	var tasks []model.Task
-	if err := json.Unmarshal(data, &tasks); err != nil {
-		return nil, fmt.Errorf("parsing task file: %w", err)
+
+	// Try JSONL format first (one JSON object per line)
+	scanner := bufio.NewScanner(bytes.NewReader(data))
+	lineNum := 0
+	jsonlSuccess := true
+	for scanner.Scan() {
+		lineNum++
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" {
+			continue
+		}
+
+		var task model.Task
+		if err := json.Unmarshal([]byte(line), &task); err != nil {
+			// Not JSONL format, will try legacy format
+			jsonlSuccess = false
+			break
+		}
+		tasks = append(tasks, task)
+	}
+
+	if err := scanner.Err(); err != nil {
+		return nil, fmt.Errorf("reading task file: %w", err)
+	}
+
+	// If JSONL parsing failed, try legacy JSON array format for backwards compatibility
+	if !jsonlSuccess {
+		tasks = nil
+		if err := json.Unmarshal(data, &tasks); err != nil {
+			return nil, fmt.Errorf("parsing task file (tried JSONL and JSON array): %w", err)
+		}
 	}
 
 	// Ensure no nil slices
@@ -100,14 +138,20 @@ func (s *Store) Load() ([]model.Task, error) {
 	return tasks, nil
 }
 
-// Save writes all tasks to the store
+// Save writes all tasks to the store in JSONL format (one task per line)
 func (s *Store) Save(tasks []model.Task) error {
-	data, err := json.MarshalIndent(tasks, "", "  ")
-	if err != nil {
-		return fmt.Errorf("encoding tasks: %w", err)
+	var buf bytes.Buffer
+
+	for _, task := range tasks {
+		data, err := json.Marshal(task)
+		if err != nil {
+			return fmt.Errorf("encoding task %s: %w", task.ID, err)
+		}
+		buf.Write(data)
+		buf.WriteByte('\n')
 	}
 
-	if err := os.WriteFile(s.taskFile(), data, 0644); err != nil {
+	if err := os.WriteFile(s.taskFile(), buf.Bytes(), 0644); err != nil {
 		return fmt.Errorf("writing task file: %w", err)
 	}
 

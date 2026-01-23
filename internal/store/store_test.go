@@ -1,6 +1,8 @@
 package store
 
 import (
+	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -42,13 +44,13 @@ func TestStoreInit(t *testing.T) {
 		t.Error("Init() did not create task.json")
 	}
 
-	// Check file contains empty array
+	// Check file is empty (JSONL format with no tasks)
 	data, err := os.ReadFile(taskFile)
 	if err != nil {
 		t.Fatalf("reading task.json: %v", err)
 	}
-	if string(data) != "[]" {
-		t.Errorf("task.json = %q, want %q", string(data), "[]")
+	if len(data) != 0 {
+		t.Errorf("task.json should be empty, got %d bytes: %q", len(data), string(data))
 	}
 }
 
@@ -636,5 +638,120 @@ func TestStoreCleanAll(t *testing.T) {
 	tasks, _ := s.Load()
 	if len(tasks) != 0 {
 		t.Errorf("After Clean(), Load() returned %d tasks, want 0", len(tasks))
+	}
+}
+
+func TestStoreLoadLegacyJSONFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	// Write legacy JSON array format
+	taskFile := filepath.Join(tmpDir, TaskDir, TaskFile)
+	legacyData := []byte(`[
+  {
+    "id": "abc",
+    "created_at": "2024-01-01T00:00:00Z",
+    "updated_at": "2024-01-01T00:00:00Z",
+    "title": "Legacy Task",
+    "description": "From JSON array",
+    "type": "task",
+    "status": "todo",
+    "labels": ["legacy"],
+    "notes": []
+  },
+  {
+    "id": "def",
+    "created_at": "2024-01-02T00:00:00Z",
+    "updated_at": "2024-01-02T00:00:00Z",
+    "title": "Another Legacy Task",
+    "description": null,
+    "type": "bug",
+    "status": "progress",
+    "labels": [],
+    "notes": []
+  }
+]`)
+	if err := os.WriteFile(taskFile, legacyData, 0644); err != nil {
+		t.Fatalf("failed to write legacy format: %v", err)
+	}
+
+	// Load should work with legacy format
+	tasks, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load() with legacy format error = %v", err)
+	}
+
+	if len(tasks) != 2 {
+		t.Fatalf("Load() returned %d tasks, want 2", len(tasks))
+	}
+
+	if tasks[0].ID != "abc" || tasks[0].Title != "Legacy Task" {
+		t.Errorf("task[0] = {ID: %q, Title: %q}, want {ID: %q, Title: %q}",
+			tasks[0].ID, tasks[0].Title, "abc", "Legacy Task")
+	}
+
+	if tasks[1].ID != "def" || tasks[1].Title != "Another Legacy Task" {
+		t.Errorf("task[1] = {ID: %q, Title: %q}, want {ID: %q, Title: %q}",
+			tasks[1].ID, tasks[1].Title, "def", "Another Legacy Task")
+	}
+
+	// Save should convert to JSONL format
+	if err := s.Save(tasks); err != nil {
+		t.Fatalf("Save() error = %v", err)
+	}
+
+	// Read the file and verify it's now JSONL
+	data, err := os.ReadFile(taskFile)
+	if err != nil {
+		t.Fatalf("reading task file: %v", err)
+	}
+
+	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
+	if len(lines) != 2 {
+		t.Errorf("JSONL file has %d lines, want 2", len(lines))
+	}
+
+	// Each line should be valid JSON
+	for i, line := range lines {
+		var task model.Task
+		if err := json.Unmarshal(line, &task); err != nil {
+			t.Errorf("line %d is not valid JSON: %v", i, err)
+		}
+	}
+}
+
+func TestStoreLoadJSONLFormat(t *testing.T) {
+	tmpDir := t.TempDir()
+	s := New(tmpDir)
+	s.Init()
+
+	// Write JSONL format
+	taskFile := filepath.Join(tmpDir, TaskDir, TaskFile)
+	jsonlData := []byte(`{"id":"abc","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z","title":"JSONL Task 1","description":"First task","type":"task","status":"todo","labels":["test"],"notes":[]}
+{"id":"def","created_at":"2024-01-02T00:00:00Z","updated_at":"2024-01-02T00:00:00Z","title":"JSONL Task 2","description":null,"type":"bug","status":"progress","labels":[],"notes":[]}
+`)
+	if err := os.WriteFile(taskFile, jsonlData, 0644); err != nil {
+		t.Fatalf("failed to write JSONL format: %v", err)
+	}
+
+	// Load should work with JSONL format
+	tasks, err := s.Load()
+	if err != nil {
+		t.Fatalf("Load() with JSONL format error = %v", err)
+	}
+
+	if len(tasks) != 2 {
+		t.Fatalf("Load() returned %d tasks, want 2", len(tasks))
+	}
+
+	if tasks[0].ID != "abc" || tasks[0].Title != "JSONL Task 1" {
+		t.Errorf("task[0] = {ID: %q, Title: %q}, want {ID: %q, Title: %q}",
+			tasks[0].ID, tasks[0].Title, "abc", "JSONL Task 1")
+	}
+
+	if tasks[1].ID != "def" || tasks[1].Title != "JSONL Task 2" {
+		t.Errorf("task[1] = {ID: %q, Title: %q}, want {ID: %q, Title: %q}",
+			tasks[1].ID, tasks[1].Title, "def", "JSONL Task 2")
 	}
 }
